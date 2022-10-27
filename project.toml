@@ -1,0 +1,15 @@
+[project]
+id = "com.melenion.bot"
+name = "Telegram Bot"
+version = "1.0.0"
+
+# [build]
+# exclude = [
+#     "/README.md",
+#     "bash-script-buildpack"
+# ]
+
+# include = []
+
+[[build.buildpacks]]
+uri = "urn:cnb:registry:fagiani/apt"
