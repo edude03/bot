@@ -1,2 +1,2 @@
-openssl-dev
+libssl-dev
 pkg-config
