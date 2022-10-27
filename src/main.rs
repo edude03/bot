@@ -66,18 +66,17 @@ async fn main() -> anyhow::Result<()> {
     let config = Config::parse();
     tracing_subscriber::fmt::init();
 
-    let health = Router::new().route("/healthz", get(health));
-
     info!("Starting Bot");
     let bot = Bot::new(config.telegram_token);
     let addr = ([127, 0, 0, 1], config.port).into();
 
-    let (mut update_listener, stop_flag, app) = axum_to_router(
-        bot.clone(),
-        webhooks::Options::new(addr, config.external_url),
-    )
-    .await?;
-    let stop_token = update_listener.stop_token();
+    // let health = Router::new().route("/healthz", get(health));
+    // let (mut update_listener, stop_flag, app) = axum_to_router(
+    //     bot.clone(),
+    //     webhooks::Options::new(addr, config.external_url),
+    // )
+    // .await?;
+    // let stop_token = update_listener.stop_token();
 
     // tokio::spawn(async move {
     //     axum::Server::bind(&addr)
