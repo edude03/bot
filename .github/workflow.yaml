@@ -1,0 +1,18 @@
+name: Release
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  release:
+    runs-on: ["ubuntu-latest"]
+    steps:
+      - uses: actions/checkout@v2
+      - id: setup-pack
+        uses: buildpacks/github-actions/setup-pack@v4.4.0
+      - id: build-image
+        run: |
+          pack build ghcr.io/edude03/bot:${{ github.sha }} \
+            --builder ghcr.io/melenion/rust-cnb-builder:latest \
+            --publish
