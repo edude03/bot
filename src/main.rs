@@ -68,7 +68,7 @@ async fn main() -> anyhow::Result<()> {
 
     info!("Starting Bot");
     let bot = Bot::new(config.telegram_token);
-    let addr = ([127, 0, 0, 1], config.port).into();
+    // let addr = ([127, 0, 0, 1], config.port).into();
 
     // let health = Router::new().route("/healthz", get(health));
     // let (mut update_listener, stop_flag, app) = axum_to_router(
