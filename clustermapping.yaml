@@ -1,0 +1,13 @@
+apiVersion: networking.internal.knative.dev/v1alpha1
+kind: ClusterDomainClaim
+metadata:
+  name: melenion.com
+spec:
+  namespace: knative-serving
+---
+apiVersion: networking.internal.knative.dev/v1alpha1
+kind: ClusterDomainClaim
+metadata:
+  name: functions.melenion.com
+spec:
+  namespace: knative-serving
