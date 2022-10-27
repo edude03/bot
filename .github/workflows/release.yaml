@@ -21,8 +21,9 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - id: build-image
+      - name: build-image
         run: |
           pack build ghcr.io/edude03/bot:${{ github.sha }} \
             --builder ghcr.io/melenion/rust-cnb-builder:latest \
+            --cache-image ghcr.io/edude03/bot-cache-image \
             --publish
