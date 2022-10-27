@@ -68,9 +68,9 @@ async fn main() -> anyhow::Result<()> {
 
     info!("Starting Bot");
     let bot = Bot::new(config.telegram_token);
-    // let addr = ([127, 0, 0, 1], config.port).into();
+    let addr = ([127, 0, 0, 1], config.port).into();
 
-    // let health = Router::new().route("/healthz", get(health));
+    let health = Router::new().route("/healthz", get(health));
     // let (mut update_listener, stop_flag, app) = axum_to_router(
     //     bot.clone(),
     //     webhooks::Options::new(addr, config.external_url),
@@ -78,17 +78,17 @@ async fn main() -> anyhow::Result<()> {
     // .await?;
     // let stop_token = update_listener.stop_token();
 
-    // tokio::spawn(async move {
-    //     axum::Server::bind(&addr)
-    //         .serve(app.merge(health).into_make_service())
-    //         .with_graceful_shutdown(stop_flag)
-    //         .await
-    //         .map_err(|err| {
-    //             stop_token.stop();
-    //             err
-    //         })
-    //         .expect("Axum server error");
-    // });
+    tokio::spawn(async move {
+        axum::Server::bind(&addr)
+            .serve(health.into_make_service())
+            // .with_graceful_shutdown(stop_flag)
+            .await
+            // .map_err(|err| {
+            //     stop_token.stop();
+            //     err
+            // })
+            .expect("Axum server error");
+    });
 
     // teloxide::repl_with_listener(bot, handle_message, update_listener).await;
 
