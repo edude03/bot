@@ -1,11 +1,15 @@
 use std::env::temp_dir;
 
 use anyhow::anyhow;
+use axum::routing::get;
+use axum::Router;
 use clap::Parser;
 use reqwest::multipart;
 use reqwest::{Body, Url};
 use serde::Deserialize;
 use tap::Tap;
+use teloxide::dispatching::update_listeners::webhooks::{axum_to_router, Options};
+use teloxide::dispatching::update_listeners::UpdateListener;
 use teloxide::net::Download;
 use teloxide::types::File as TelegramFile;
 use teloxide::RequestError;
@@ -14,7 +18,6 @@ use tempfile::{tempfile, NamedTempFile, TempDir};
 use tokio::fs::File;
 use tokio_util::codec::{BytesCodec, FramedRead};
 use tracing::{debug, error, info, instrument, span, Instrument, Level};
-
 #[derive(Parser)]
 struct Config {
     #[clap(env)]
@@ -54,23 +57,41 @@ async fn handle_message(bot: Bot, msg: Message) -> Result<(), RequestError> {
     }
 }
 
+async fn health() -> &'static str {
+    "ok"
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let config = Config::parse();
     tracing_subscriber::fmt::init();
 
+    let health = Router::new().route("/healthz", get(health));
+
     info!("Starting Bot");
     let bot = Bot::new(config.telegram_token);
-
     let addr = ([127, 0, 0, 1], config.port).into();
-    let listener = webhooks::axum(
+
+    let (mut update_listener, stop_flag, app) = axum_to_router(
         bot.clone(),
         webhooks::Options::new(addr, config.external_url),
     )
-    .await
-    .expect("Couldn't setup webhook");
+    .await?;
+    let stop_token = update_listener.stop_token();
 
-    teloxide::repl_with_listener(bot, handle_message, listener).await;
+    tokio::spawn(async move {
+        axum::Server::bind(&addr)
+            .serve(app.merge(health).into_make_service())
+            .with_graceful_shutdown(stop_flag)
+            .await
+            .map_err(|err| {
+                stop_token.stop();
+                err
+            })
+            .expect("Axum server error");
+    });
+
+    teloxide::repl_with_listener(bot, handle_message, update_listener).await;
 
     Ok(())
 }
