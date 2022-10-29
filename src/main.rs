@@ -17,7 +17,7 @@ use teloxide::{dispatching::update_listeners::webhooks, prelude::*};
 use tempfile::{tempfile, NamedTempFile, TempDir};
 use tokio::fs::File;
 use tokio_util::codec::{BytesCodec, FramedRead};
-use tracing::{debug, error, info, instrument, span, Instrument, Level};
+use tracing::{debug, error, info, instrument, span, warn, Instrument, Level};
 #[derive(Parser)]
 struct Config {
     #[clap(env)]
@@ -25,11 +25,20 @@ struct Config {
     #[clap(env)]
     port: u16,
     #[clap(env)]
-    external_url: Url,
+    external_url: Option<Url>,
 }
 
 #[instrument(skip_all, fields(message_id = ?msg.id, user = ?msg.from()), err(Debug))]
 async fn handle_message(bot: Bot, msg: Message) -> Result<(), RequestError> {
+    if let Some(txt) = msg.text() {
+        if txt.starts_with("/start") {
+            bot.send_message(msg.chat.id, "Send a voice note to start")
+                .await;
+
+            return Ok(());
+        }
+    }
+
     let file_id = if let Some(file) = msg.audio() {
         Some(file.file.id.clone())
     } else if let Some(file) = msg.voice() {
@@ -71,28 +80,48 @@ async fn main() -> anyhow::Result<()> {
     let addr = ([127, 0, 0, 1], config.port).into();
 
     let health = Router::new().route("/healthz", get(health));
-    // let (mut update_listener, stop_flag, app) = axum_to_router(
-    //     bot.clone(),
-    //     webhooks::Options::new(addr, config.external_url),
-    // )
-    // .await?;
-    // let stop_token = update_listener.stop_token();
 
-    tokio::spawn(async move {
-        axum::Server::bind(&addr)
-            .serve(health.into_make_service())
-            // .with_graceful_shutdown(stop_flag)
-            .await
-            // .map_err(|err| {
-            //     stop_token.stop();
-            //     err
-            // })
-            .expect("Axum server error");
-    });
+    if let Some(url) = config.external_url {
+        let (mut update_listener, stop_flag, app) =
+            axum_to_router(bot.clone(), webhooks::Options::new(addr, url)).await?;
 
-    // teloxide::repl_with_listener(bot, handle_message, update_listener).await;
+        let stop_token = update_listener.stop_token();
 
-    teloxide::repl(bot, handle_message).await;
+        let handle = tokio::spawn(async move {
+            axum::Server::bind(&addr)
+                .serve(health.merge(app).into_make_service())
+                .with_graceful_shutdown(stop_flag)
+                .await
+                .map_err(|err| {
+                    stop_token.stop();
+                    err
+                })
+                .expect("Axum server error");
+        });
+
+        let bot_runner = teloxide::repl_with_listener(bot, handle_message, update_listener);
+        tokio::select! {
+            _ = handle => println!("finished"),
+            _ = bot_runner => println!("bot finished")
+        }
+    } else {
+        // TODO: Remove duplications
+        warn!("No external URL provided, using websocket");
+        let bot_runner = teloxide::repl(bot, handle_message);
+        let handle = tokio::spawn(async move {
+            axum::Server::bind(&addr)
+                .serve(health.into_make_service())
+                .await
+                .expect("Axum server error");
+        });
+
+        tokio::select! {
+            _ = handle => println!("finished"),
+            _ = bot_runner => println!("bot finished")
+        }
+    }
+
+    //
 
     Ok(())
 }
