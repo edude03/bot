@@ -8,16 +8,14 @@ use reqwest::multipart;
 use reqwest::{Body, Url};
 use serde::Deserialize;
 use tap::Tap;
-use teloxide::dispatching::update_listeners::webhooks::{axum_to_router, Options};
-use teloxide::dispatching::update_listeners::UpdateListener;
+use teloxide::dispatching::update_listeners::webhooks::axum_to_router;
 use teloxide::net::Download;
 use teloxide::types::File as TelegramFile;
 use teloxide::RequestError;
 use teloxide::{dispatching::update_listeners::webhooks, prelude::*};
-use tempfile::{tempfile, NamedTempFile, TempDir};
 use tokio::fs::File;
 use tokio_util::codec::{BytesCodec, FramedRead};
-use tracing::{debug, error, info, instrument, span, warn, Instrument, Level};
+use tracing::{error, info, instrument, span, warn, Instrument, Level};
 #[derive(Parser)]
 struct Config {
     #[clap(env)]
@@ -33,7 +31,7 @@ async fn handle_message(bot: Bot, msg: Message) -> Result<(), RequestError> {
     if let Some(txt) = msg.text() {
         if txt.starts_with("/start") {
             bot.send_message(msg.chat.id, "Send a voice note to start")
-                .await;
+                .await?;
 
             return Ok(());
         }
@@ -49,7 +47,7 @@ async fn handle_message(bot: Bot, msg: Message) -> Result<(), RequestError> {
 
     if let Some(id) = file_id {
         bot.send_chat_action(msg.chat.id, teloxide::types::ChatAction::Typing)
-            .await;
+            .await?;
         let resp = transcribe(&bot, id)
             .await
             .map_err(|e| {
@@ -82,20 +80,17 @@ async fn main() -> anyhow::Result<()> {
     let health = Router::new().route("/healthz", get(health));
 
     if let Some(url) = config.external_url {
-        let (mut update_listener, stop_flag, app) =
+        info!("External url is configured, using webhook mode");
+        let (update_listener, _, app) =
             axum_to_router(bot.clone(), webhooks::Options::new(addr, url)).await?;
 
-        let stop_token = update_listener.stop_token();
+        // calling stop removes the webhook, so it prevents your serverless function from working anymore
+        // let stop_token = update_listener.stop_token();
 
         let handle = tokio::spawn(async move {
             axum::Server::bind(&addr)
                 .serve(health.merge(app).into_make_service())
-                .with_graceful_shutdown(stop_flag)
                 .await
-                .map_err(|err| {
-                    stop_token.stop();
-                    err
-                })
                 .expect("Axum server error");
         });
 
@@ -127,17 +122,17 @@ async fn main() -> anyhow::Result<()> {
 }
 
 #[derive(Debug, Deserialize)]
-struct Segment {
-    id: f32,
-    seek: f32,
-    start: f32,
-    end: f32,
-    text: String,
-    tokens: Vec<f32>,
-    temperature: f32,
-    avg_logprob: f64,
-    compression_ratio: f64,
-    no_speech_prob: f64,
+pub struct Segment {
+    pub id: f32,
+    pub seek: f32,
+    pub start: f32,
+    pub end: f32,
+    pub text: String,
+    pub tokens: Vec<f32>,
+    pub temperature: f32,
+    pub avg_logprob: f64,
+    pub compression_ratio: f64,
+    pub no_speech_prob: f64,
 }
 
 #[derive(Debug, Deserialize)]
